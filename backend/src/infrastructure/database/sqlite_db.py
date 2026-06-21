@@ -1,3 +1,4 @@
+from contextlib import closing
 import sqlite3
 from typing import Optional
 
@@ -19,7 +20,7 @@ class SqliteSubscriptionRepository(SubscriptionRepository):
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS subscriptions (
@@ -38,7 +39,7 @@ class SqliteSubscriptionRepository(SubscriptionRepository):
         # subscription.payment_method es dict desde el use case; lo guardamos como str JSON-like
         # Para mantener el alcance simple: guardamos como string del dict.
         # (En una versión completa: json.dumps)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO subscriptions (id, user_name, email, payment_method, status, created_at)
@@ -62,7 +63,7 @@ class SqliteSubscriptionRepository(SubscriptionRepository):
         return subscription
 
     def find_by_id(self, subscription_id: str) -> Optional[Subscription]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             cur = conn.execute(
                 """
                 SELECT id, user_name, email, payment_method, status, created_at

@@ -1,5 +1,6 @@
+from contextlib import closing
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 
@@ -16,7 +17,7 @@ class OutboxRepository:
         return conn
 
     def _init_db(self) -> None:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS outbox_events (
@@ -35,8 +36,8 @@ class OutboxRepository:
             conn.commit()
 
     def create_event(self, *, event_id: str, event_type: str, payload: str, status: str = "PENDING", max_attempts: int = 5):
-        now = datetime.utcnow().isoformat()
-        with self._connect() as conn:
+        now = datetime.now(timezone.utc).isoformat()
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 INSERT INTO outbox_events (id, event_type, payload, status, attempts, max_attempts, next_attempt_at, created_at, updated_at)
@@ -47,8 +48,8 @@ class OutboxRepository:
             conn.commit()
 
     def find_ready_events(self, limit: int = 10) -> List[sqlite3.Row]:
-        now = datetime.utcnow().isoformat()
-        with self._connect() as conn:
+        now = datetime.now(timezone.utc).isoformat()
+        with closing(self._connect()) as conn:
             cur = conn.execute(
                 """
                 SELECT * FROM outbox_events
@@ -63,11 +64,12 @@ class OutboxRepository:
         return rows
 
     def mark_attempt_and_reschedule(self, *, event_id: str, attempt_increment: int, backoff_seconds: int):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
         next_ts = now.timestamp() + backoff_seconds
-        next_iso = datetime.utcfromtimestamp(next_ts).isoformat()
+        next_iso = datetime.fromtimestamp(next_ts, timezone.utc).isoformat()
 
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
 
             conn.execute(
                 """
@@ -77,13 +79,13 @@ class OutboxRepository:
                     next_attempt_at = ?
                 WHERE id = ?
                 """,
-                (attempt_increment, now, next_iso, event_id),
+                (attempt_increment, now_iso, next_iso, event_id),
             )
             conn.commit()
 
     def mark_success(self, event_id: str):
-        now = datetime.utcnow().isoformat()
-        with self._connect() as conn:
+        now = datetime.now(timezone.utc).isoformat()
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 UPDATE outbox_events
@@ -96,8 +98,8 @@ class OutboxRepository:
             conn.commit()
 
     def mark_failed(self, event_id: str):
-        now = datetime.utcnow().isoformat()
-        with self._connect() as conn:
+        now = datetime.now(timezone.utc).isoformat()
+        with closing(self._connect()) as conn:
             conn.execute(
                 """
                 UPDATE outbox_events
