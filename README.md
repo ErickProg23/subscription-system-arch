@@ -201,6 +201,8 @@ Se incluyeron:
 
 - tests unitarios del caso de uso
 - tests unitarios del worker de outbox
+- tests del controller para cubrir flujos exitosos y de error
+- tests del servicio de webhook
 - un test de integracion para el flujo HTTP con Flask + SQLite
 
 Para ejecutarlos:
@@ -209,6 +211,17 @@ Para ejecutarlos:
 cd backend
 python -m unittest discover -s tests -v
 ```
+
+Para medir cobertura:
+
+```powershell
+cd backend
+coverage erase
+coverage run --source=src -m unittest discover -s tests -v
+coverage report -m
+```
+
+Cobertura actual del backend medida sobre `src`: `87%`.
 
 ## Decisiones Tecnicas
 
@@ -240,6 +253,35 @@ Con outbox:
 - errores inesperados del servidor responden con `5xx`
 - errores del webhook se intentan mitigar con retry
 
+### Justificacion de la transaccion de base de datos
+
+El flujo actual guarda primero la suscripcion y luego registra el evento en outbox.
+Para la prueba tecnica priorice una solucion simple, legible y funcional que demostrara:
+
+- persistencia del estado de suscripcion
+- desacoplamiento con el servicio externo
+- resiliencia con retry y outbox
+
+En este punto, si la base de datos cayera exactamente entre la escritura de la suscripcion y
+la escritura del evento del outbox, podria existir una inconsistencia temporal: la suscripcion
+quedaria almacenada pero el evento no.
+
+Esta decision fue consciente para mantener el alcance acotado de la prueba y enfocarme en
+mostrar la separacion de capas, el flujo de negocio y la resiliencia ante fallos del servicio
+externo.
+
+En un entorno de produccion, la mejora natural seria encapsular `guardar suscripcion + guardar
+evento outbox` dentro de una unica transaccion de base de datos usando una sola conexion y
+`commit/rollback` atomico. De esa forma:
+
+- si ambas operaciones salen bien, se confirma la transaccion
+- si una falla, se revierte todo
+- se evita dejar suscripciones persistidas sin su evento de notificacion asociado
+
+Por lo tanto, para esta prueba la estrategia adoptada demuestra el patron y el flujo completo,
+pero reconozco explicitamente que la version ideal de produccion debe hacer esa escritura de
+forma transaccional.
+
 ## Escalabilidad En Produccion
 
 Si el sistema recibiera 10,000 suscripciones por segundo, la evolucion natural seria:
@@ -268,15 +310,31 @@ En lugar de procesar el outbox en un hilo local, se podria:
 - metricas de intentos, fallos y latencia
 - alertas cuando la cola crezca o el webhook falle repetidamente
 
+## Docker y CI/CD En Produccion
+
+Como parte del README de la prueba, la propuesta para llevar este backend a produccion seria:
+
+### Docker
+
+- crear un `Dockerfile` para empaquetar la API con sus dependencias
+- usar variables de entorno para configuracion sensible
+- ejecutar la aplicacion en un contenedor desacoplado del host
+
+### CI/CD
+
+- ejecutar tests y cobertura en cada push o pull request
+- bloquear merges si falla la suite o si la cobertura cae por debajo del minimo esperado
+- construir la imagen Docker automaticamente tras validar la rama principal
+- desplegar a un entorno de staging o produccion de forma controlada
+
 ## Limitaciones Conocidas
 
 - SQLite es suficiente para demo, no para alta concurrencia real
-- la operacion `guardar suscripcion + guardar evento outbox` aun puede mejorarse con una transaccion unica
+- la operacion `guardar suscripcion + guardar evento outbox` debe hacerse con una transaccion unica en produccion
 - el servicio externo esta simulado, no integrado con un proveedor real
 
 ## Proximos Pasos
 
-- aumentar cobertura de tests
 - agregar Docker
 - agregar CI/CD
 - hacer transaccional la escritura de suscripcion y outbox
