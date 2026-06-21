@@ -54,7 +54,7 @@
                 payment_method: {'type': metodoPago}
             };
 
-            const respuesta = await fetch('/api/suscribirse', {
+            const respuesta = await fetch('/api/subscribirse', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -67,7 +67,7 @@
             const mensajeDiv = document.getElementById('status-message');
 
             if (respuesta.ok){
-                mensajeDiv.innerHTML = "Exito" + datos.message;
+                mensajeDiv.innerHTML = "Exito " + datos.message;
                 mensajeDiv.style.color = 'green';
             } else {
                 mensajeDiv.innerHTML = "Error: " + datos.error;

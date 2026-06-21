@@ -5,7 +5,7 @@ def create_subscription_blueprint(use_case):
     ""
     subscription_bp = Blueprint("subscriptions", __name__)
     
-    @subscription_bp.route('/api/subscribe', methods=['POST'])
+    @subscription_bp.route('/api/subscribirse', methods=['POST'])
     def subscribe():
         data = request.get_json()
 
