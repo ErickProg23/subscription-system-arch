@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.0/css/bulma.min.css">
+</head>
+<body>
+    <section class="section">
+        <div class="container">
+            <h1 class="title">Suscripción</h1>
+
+            <div class="field">
+                <label class="label">Nombre</label>
+                <div class="control">
+                    <input id="name" class="input" type="text" placeholder="Tu nombre">
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="label">Correo electrónico</label>
+                <div class="control">
+                    <input id="email" class="input" type="email" placeholder="Tu correo electrónico">
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="label">Método de pago</label>
+                <div class="control">
+                    <div class="select">
+                        <select id="payment-method">
+                            <option value="tarjeta">Tarjeta de crédito</option>
+                            <option value="paypal">PayPal</option>
+                            <option value="transferencia">Transferencia bancaria</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+
+            
+            <button id="btn-submit" class="button is-primary" onclick="suscribirse()">Suscribirme</button>
+            <div id="status-message"></div>
+        </div>
+    </section>
+
+    <script>
+        async function suscribirse() {
+            const nombre = document.getElementById('name').value;
+            const correo = document.getElementById('email').value;
+            const metodoPago = document.getElementById('payment-method').value;
+
+            const payload = {
+                user_name: nombre,
+                email: correo,
+                payment_method: {'type': metodoPago}
+            };
+
+            const respuesta = await fetch('/api/suscribirse', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const datos = await respuesta.json();
+
+            const mensajeDiv = document.getElementById('status-message');
+
+            if (respuesta.ok){
+                mensajeDiv.innerHTML = "Exito" + datos.message;
+                mensajeDiv.style.color = 'green';
+            } else {
+                mensajeDiv.innerHTML = "Error: " + datos.error;
+                mensajeDiv.style.color = 'red';
+            }
+        }
+    </script>
+</body>
+</html>
