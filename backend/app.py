@@ -1,10 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from src.infrastructure.database.memory_db import MemorySubscriptionRepository
 from src.infrastructure.external_services.webhook_service import WebhookNotificationService
 from src.application.use_cases import CreateSubscriptionUseCase
 from src.infrastructure.controllers.subscription_controller import create_subscription_blueprint
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates', static_folder='static')
 
 
 # --- 1. Configuracion de dependencias ---
@@ -18,6 +18,10 @@ subscription_use_case = CreateSubscriptionUseCase(
 
 # --- 2. Registro de rutas ---
 app.register_blueprint(create_subscription_blueprint(subscription_use_case))
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/api/simulate_errors', methods=['POST'])
 def simulate_errors():
