@@ -1,15 +1,20 @@
 from src.domain.entities.subscription import Subscription, SubscriptionStatus
 from src.domain.repositories.subscription_repository import SubscriptionRepository
 
-class CreateSubscriptionUseCase:
-    """ Recibe las herramientas necesarias para ejecutar la lógica de negocio relacionada con las suscripciones. """
+import uuid
+from datetime import datetime
 
-    def __init__(self, subscription_repository: SubscriptionRepository, notification_service):
+
+class CreateSubscriptionUseCase:
+    """Recibe las herramientas necesarias para ejecutar la lógica de negocio."""
+
+    def __init__(self, subscription_repository: SubscriptionRepository, notification_service, outbox_repository):
         self.subscription_repository = subscription_repository
         self.notification_service = notification_service
-
+        self.outbox_repository = outbox_repository
 
     def execute(self, user_name: str, email: str, payment_method: dict) -> Subscription:
+
         """ Crea una nueva suscripción para un usuario. """
 
         # Validar los datos de entrada
@@ -24,11 +29,22 @@ class CreateSubscriptionUseCase:
             status=SubscriptionStatus.ACTIVE
         )
 
-        # Guardar la suscripcion en la base de datos
-        # (Si la DB falla, el codigo se detiene y nunca se cobra ni notifica al usuario)
+        # 1) Guardar la suscripción
+        # (La notificación NO se hace sincrónicamente: se registra un evento en outbox)
         self.subscription_repository.save(subscription)
 
-        # Enviar una notificación al usuario
-        self.notification_service.notify_payment_success(subscription.id)
+        # 2) Guardar evento en outbox para procesarlo async
+        event_payload = {
+            "subscription_id": subscription.id,
+        }
+        event_id = str(subscription.id)  # idempotencia simple por suscripción
+        self.outbox_repository.create_event(
+            event_id=event_id,
+            event_type="NOTIFY_WEBHOOK",
+            payload=str(event_payload),
+            status="PENDING",
+            max_attempts=5,
+        )
 
         return subscription
+

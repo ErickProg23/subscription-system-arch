@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from src.domain.entities.subscription import SubscriptionStatus
 
+
 def create_subscription_blueprint(use_case, repository):
     "Creamos uin Blueprint de Flask para manejar las rutas relacionadas con las suscripciones"
     ""
@@ -30,19 +31,16 @@ def create_subscription_blueprint(use_case, repository):
         
         except Exception as e:
             error_message = str(e)
-            
-            # Verificamos si es un error de conexión
-            if "conexión" in error_message.lower():
-                return jsonify({"error": "Fallo en la base de datos", "details": error_message}), 503
-            
-            # Verificamos si es un error de servidor externo (500)
-            elif "500" in error_message:
+
+            # Mantener compatibilidad con la interfaz original.
+            # Con SQLite/BD real podemos mapear cualquier excepción a 503 (DB) o 502 (externo)
+            # dependiendo del origen del error.
+            if "500" in error_message or "servicio externo" in error_message.lower() or "webhook" in error_message.lower():
                 return jsonify({"error": "Fallo en el servicio de pagos externo", "details": error_message}), 502
-            
-            # Cualquier otra cosa
-            else:
-                return jsonify({"error": "Error interno del servidor", "details": error_message}), 500
-        pass
+
+            # Por defecto asumimos problemas de BD como 503
+            return jsonify({"error": "Fallo en el servidor", "details": error_message}), 503
+
 
     # --- NUEVA RUTA PARA CANCELAR ---
     @subscription_bp.route('/api/subscribirse/<sub_id>/cancelar', methods=['POST'])
