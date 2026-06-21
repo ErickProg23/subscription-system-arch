@@ -63,6 +63,19 @@ class OutboxRepository:
             rows = cur.fetchall()
         return rows
 
+    def find_event_by_id(self, event_id: str) -> Optional[sqlite3.Row]:
+        with closing(self._connect()) as conn:
+            cur = conn.execute(
+                """
+                SELECT *
+                FROM outbox_events
+                WHERE id = ?
+                """,
+                (event_id,),
+            )
+            row = cur.fetchone()
+        return row
+
     def mark_attempt_and_reschedule(self, *, event_id: str, attempt_increment: int, backoff_seconds: int):
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()

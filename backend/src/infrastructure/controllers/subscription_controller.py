@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from src.domain.entities.subscription import SubscriptionStatus
 
 
-def create_subscription_blueprint(use_case, repository):
+def create_subscription_blueprint(use_case, repository, outbox_repository):
     "Creamos uin Blueprint de Flask para manejar las rutas relacionadas con las suscripciones"
     ""
     subscription_bp = Blueprint("subscriptions", __name__)
@@ -18,6 +18,31 @@ def create_subscription_blueprint(use_case, repository):
             return jsonify({
                 "message": "Suscripción consultada exitosamente",
                 "data": suscripcion.to_dict()
+            }), 200
+        except Exception as e:
+            return jsonify({"error": "Error interno del servidor", "details": str(e)}), 500
+
+    @subscription_bp.route('/api/subscribirse/<sub_id>/payment-status', methods=['GET'])
+    def get_payment_status(sub_id):
+        try:
+            event = outbox_repository.find_event_by_id(sub_id)
+
+            if not event:
+                return jsonify({
+                    "message": "Aun no existe confirmación de pago para esta suscripción",
+                    "payment_status": "PENDING",
+                }), 200
+
+            status_map = {
+                "PENDING": "PENDING",
+                "PROCESSED": "CONFIRMED",
+                "FAILED": "FAILED",
+            }
+
+            return jsonify({
+                "message": "Estado de notificación consultado exitosamente",
+                "payment_status": status_map.get(event["status"], "PENDING"),
+                "attempts": event["attempts"],
             }), 200
         except Exception as e:
             return jsonify({"error": "Error interno del servidor", "details": str(e)}), 500

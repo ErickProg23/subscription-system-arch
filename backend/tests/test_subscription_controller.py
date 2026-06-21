@@ -44,13 +44,25 @@ class DummyRepository:
         return subscription
 
 
+class DummyOutboxRepository:
+    def __init__(self, event=None, exception_message=None):
+        self.event = event
+        self.exception_message = exception_message
+
+    def find_event_by_id(self, event_id):
+        if self.exception_message:
+            raise Exception(self.exception_message)
+        return self.event
+
+
 class SubscriptionControllerTests(unittest.TestCase):
-    def create_client(self, use_case=None, repository=None):
+    def create_client(self, use_case=None, repository=None, outbox_repository=None):
         app = Flask(__name__)
         app.register_blueprint(
             create_subscription_blueprint(
                 use_case or DummyUseCase(),
                 repository or DummyRepository(),
+                outbox_repository or DummyOutboxRepository(),
             )
         )
         return app.test_client()
@@ -136,6 +148,16 @@ class SubscriptionControllerTests(unittest.TestCase):
         response = client.post("/api/subscribirse/sub-500/expirar")
 
         self.assertEqual(response.status_code, 500)
+
+    def test_payment_status_returns_failed_when_event_failed(self):
+        client = self.create_client(
+            outbox_repository=DummyOutboxRepository(event={"status": "FAILED", "attempts": 3})
+        )
+
+        response = client.get("/api/subscribirse/sub-1/payment-status")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["payment_status"], "FAILED")
 
 
 if __name__ == "__main__":

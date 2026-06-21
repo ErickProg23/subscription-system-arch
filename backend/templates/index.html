@@ -30,6 +30,7 @@
                 <h2 class="subtitle">Resumen de tu Suscripción</h2>
                 <div class="content">
                     <p><strong>Estado Actual:</strong> <span id="sub-status" class="tag is-info is-medium">Cargando...</span></p>
+                    <p><strong>Pago:</strong> <span id="payment-status" class="tag is-info is-light is-medium">Pendiente de confirmación</span></p>
                     <p class="is-size-7 has-text-grey">ID de referencia: <span id="sub-id-display"></span></p>
                 </div>
                 <input type="hidden" id="sub-id">
@@ -167,7 +168,8 @@
             document.getElementById('sub-id-display').innerText = subId;
 
             await cargarEstadoSuscripcion();
-            mostrarToast("Suscripción creada exitosamente.");
+            actualizarEstadoPago("PENDING");
+            await esperarConfirmacionPago();
         }
 
         async function cargarEstadoSuscripcion() {
@@ -212,6 +214,54 @@
                 btnCancelar.style.display = 'none';
                 btnExpirar.style.display = 'none';
             }
+        }
+
+        function actualizarEstadoPago(paymentStatus) {
+            const paymentTag = document.getElementById('payment-status');
+
+            if (paymentStatus === "CONFIRMED") {
+                paymentTag.innerText = "Pago confirmado";
+                paymentTag.className = "tag is-success is-light is-medium";
+            } else if (paymentStatus === "FAILED") {
+                paymentTag.innerText = "Pago no confirmado";
+                paymentTag.className = "tag is-danger is-light is-medium";
+            } else {
+                paymentTag.innerText = "Pendiente de confirmación";
+                paymentTag.className = "tag is-info is-light is-medium";
+            }
+        }
+
+        async function consultarEstadoPago() {
+            const subId = document.getElementById('sub-id').value;
+            const respuesta = await fetch(`/api/subscribirse/${subId}/payment-status`);
+            const datos = await respuesta.json();
+
+            if (!respuesta.ok) {
+                throw new Error(datos.error || "No se pudo consultar la confirmación del pago.");
+            }
+
+            return datos.payment_status;
+        }
+
+        async function esperarConfirmacionPago(maxAttempts = 8, intervalMs = 1500) {
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                const paymentStatus = await consultarEstadoPago();
+                actualizarEstadoPago(paymentStatus);
+
+                if (paymentStatus === "CONFIRMED") {
+                    mostrarToast("¡Pago exitoso! Suscripción activada.");
+                    return;
+                }
+
+                if (paymentStatus === "FAILED") {
+                    mostrarError("El pago no pudo confirmarse correctamente.");
+                    return;
+                }
+
+                await new Promise(resolve => setTimeout(resolve, intervalMs));
+            }
+
+            mostrarError("El pago sigue en proceso de confirmación. Puedes refrescar el estado en unos segundos.");
         }
 
         async function cancelarSuscripcion() {

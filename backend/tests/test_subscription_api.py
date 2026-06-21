@@ -39,7 +39,11 @@ class SubscriptionApiIntegrationTests(unittest.TestCase):
 
         app = Flask(__name__)
         app.register_blueprint(
-            create_subscription_blueprint(self.use_case, self.subscription_repository)
+            create_subscription_blueprint(
+                self.use_case,
+                self.subscription_repository,
+                self.outbox_repository,
+            )
         )
         self.client = app.test_client()
 
@@ -106,6 +110,31 @@ class SubscriptionApiIntegrationTests(unittest.TestCase):
         body = get_response.get_json()
         self.assertEqual(body["data"]["id"], subscription_id)
         self.assertEqual(body["data"]["status"], "Activa")
+
+    def test_payment_status_returns_pending_and_confirmed(self):
+        create_response = self.client.post(
+            "/api/subscribirse",
+            json={
+                "user_name": "Erick",
+                "email": "erick@example.com",
+                "payment_method": {"type": "card", "last4": "4242"},
+            },
+        )
+        subscription_id = create_response.get_json()["data"]["id"]
+
+        pending_response = self.client.get(
+            f"/api/subscribirse/{subscription_id}/payment-status"
+        )
+        self.assertEqual(pending_response.status_code, 200)
+        self.assertEqual(pending_response.get_json()["payment_status"], "PENDING")
+
+        self.outbox_repository.mark_success(subscription_id)
+
+        confirmed_response = self.client.get(
+            f"/api/subscribirse/{subscription_id}/payment-status"
+        )
+        self.assertEqual(confirmed_response.status_code, 200)
+        self.assertEqual(confirmed_response.get_json()["payment_status"], "CONFIRMED")
 
 
 if __name__ == "__main__":

@@ -59,7 +59,9 @@ def start_outbox_worker():
 
 
 # --- 2. Registro de rutas ---
-app.register_blueprint(create_subscription_blueprint(subscription_use_case, db_repository))
+app.register_blueprint(
+    create_subscription_blueprint(subscription_use_case, db_repository, outbox_repository)
+)
 
 @app.route('/')
 def index():
