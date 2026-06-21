@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
+from src.domain.entities.subscription import SubscriptionStatus
 
-
-def create_subscription_blueprint(use_case):
+def create_subscription_blueprint(use_case, repository):
     "Creamos uin Blueprint de Flask para manejar las rutas relacionadas con las suscripciones"
     ""
     subscription_bp = Blueprint("subscriptions", __name__)
@@ -42,7 +42,31 @@ def create_subscription_blueprint(use_case):
             # Cualquier otra cosa
             else:
                 return jsonify({"error": "Error interno del servidor", "details": error_message}), 500
+        pass
+
+    # --- NUEVA RUTA PARA CANCELAR ---
+    @subscription_bp.route('/api/subscribirse/<sub_id>/cancelar', methods=['POST'])
+    def cancelar(sub_id):
+        try:
+            # 1. Buscamos la suscripción en memoria
+            suscripcion = repository.find_by_id(sub_id)
             
+            if not suscripcion:
+                return jsonify({"error": "Suscripción no encontrada"}), 404
             
-        
+            # 2. Cambiamos el estado
+            suscripcion.status = SubscriptionStatus.CANCELED
+            
+            # 3. Guardamos el cambio (en memoria es automático si modificas el objeto, 
+            # pero es buena práctica llamar al save)
+            repository.save(suscripcion)
+            
+            return jsonify({
+                "message": "Suscripción cancelada exitosamente",
+                "status": suscripcion.status.value
+            }), 200
+            
+        except Exception as e:
+            return jsonify({"error": "Error interno del servidor", "details": str(e)}), 500
+
     return subscription_bp

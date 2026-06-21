@@ -15,18 +15,18 @@ class MemorySubscriptionRepository(SubscriptionRepository):
         self._subscriptions[subscription.id] = subscription.to_dict()
 
     def find_by_id(self, subscription_id: str) -> Subscription:
-        # Busca la suscripción por ID en la lista de suscripciones
+        from src.domain.entities.subscription import SubscriptionStatus # Importar el enum arriba si es necesario
+        
         sub_data = self._subscriptions.get(subscription_id)
 
         if not sub_data:
-            raise Exception("Error: Suscripción no encontrada.")
-        return None
+            return None
     
-        # si la encuentra, la devulve a armar como una entidad
         return Subscription(
             user_name=sub_data['user_name'],
             email=sub_data['email'],
             payment_method=sub_data['payment_method'],
-            status=sub_data['status'],
+            # Convertimos el string ("Activa") de vuelta a Enum
+            status=SubscriptionStatus(sub_data['status']), 
             id=sub_data['id']
         )

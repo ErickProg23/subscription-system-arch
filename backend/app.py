@@ -17,7 +17,7 @@ subscription_use_case = CreateSubscriptionUseCase(
 )
 
 # --- 2. Registro de rutas ---
-app.register_blueprint(create_subscription_blueprint(subscription_use_case))
+app.register_blueprint(create_subscription_blueprint(subscription_use_case, db_repository))
 
 @app.route('/')
 def index():
