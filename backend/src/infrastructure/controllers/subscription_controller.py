@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 
+
 def create_subscription_blueprint(use_case):
     "Creamos uin Blueprint de Flask para manejar las rutas relacionadas con las suscripciones"
     ""
@@ -41,5 +42,7 @@ def create_subscription_blueprint(use_case):
             # Cualquier otra cosa
             else:
                 return jsonify({"error": "Error interno del servidor", "details": error_message}), 500
+            
+            
         
     return subscription_bp

@@ -1,78 +1,211 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suscripción Pro</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.0/css/bulma.min.css">
+    <style>
+        /* Toast para notificaciones en tiempo real (Punto 4 y 6) */
+        #toast {
+            position: fixed; top: 20px; right: 20px; padding: 15px 25px;
+            background: #48c774; color: white; border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateX(150%); transition: transform 0.3s ease-out;
+            z-index: 1000; font-weight: bold;
+        }
+        #toast.show { transform: translateX(0); }
+    </style>
 </head>
 <body>
+    <div id="toast" aria-live="polite">¡Pago exitoso! Suscripción activada.</div>
+
     <section class="section">
-        <div class="container">
-            <h1 class="title">Suscripción</h1>
+        <div class="container" style="max-width: 600px;">
+            <h1 class="title has-text-centered">Portal de Suscripción</h1>
 
-            <div class="field">
-                <label class="label">Nombre</label>
-                <div class="control">
-                    <input id="name" class="input" type="text" placeholder="Tu nombre">
+            <div id="status-message" class="notification is-danger is-light" style="display: none;"></div>
+
+            <div id="dashboard" class="box" style="display: none;">
+                <h2 class="subtitle">Resumen de tu Suscripción</h2>
+                <div class="content">
+                    <p><strong>Estado Actual:</strong> <span id="sub-status" class="tag is-info is-medium">Cargando...</span></p>
+                    <p class="is-size-7 has-text-grey">ID de referencia: <span id="sub-id-display"></span></p>
                 </div>
+                <input type="hidden" id="sub-id">
+                <button id="btn-cancelar" class="button is-danger is-outlined is-fullwidth" onclick="cancelarSuscripcion()">
+                    Cancelar Suscripción
+                </button>
             </div>
 
-            <div class="field">
-                <label class="label">Correo electrónico</label>
-                <div class="control">
-                    <input id="email" class="input" type="email" placeholder="Tu correo electrónico">
-                </div>
-            </div>
-
-            <div class="field">
-                <label class="label">Método de pago</label>
-                <div class="control">
-                    <div class="select">
-                        <select id="payment-method">
-                            <option value="tarjeta">Tarjeta de crédito</option>
-                            <option value="paypal">PayPal</option>
-                            <option value="transferencia">Transferencia bancaria</option>
-                        </select>
+            <form id="subscription-form" class="box" onsubmit="event.preventDefault(); iniciarSuscripcion();">
+                <div class="field">
+                    <label class="label">Nombre completo</label>
+                    <div class="control">
+                        <input id="name" class="input" type="text" placeholder="Ej. Juan Pérez" required aria-required="true">
                     </div>
                 </div>
-            </div>
 
+                <div class="field">
+                    <label class="label">Correo electrónico</label>
+                    <div class="control">
+                        <input id="email" class="input" type="email" placeholder="correo@ejemplo.com" required aria-required="true">
+                    </div>
+                </div>
 
-            
-            <button id="btn-submit" class="button is-primary" onclick="suscribirse()">Suscribirme</button>
-            <div id="status-message"></div>
+                <div class="field">
+                    <label class="label">Método de pago (Simulado)</label>
+                    <div class="control">
+                        <div class="select is-fullwidth">
+                            <select id="payment-method" required>
+                                <option value="tarjeta">Tarjeta de Crédito</option>
+                                <option value="paypal">PayPal</option>
+                                <option value="transferencia">Transferencia Bancaria</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <button id="btn-submit" type="submit" class="button is-primary is-fullwidth is-medium mt-4">
+                    Procesar Pago y Suscribirme
+                </button>
+            </form>
         </div>
     </section>
 
     <script>
-        async function suscribirse() {
-            const nombre = document.getElementById('name').value;
-            const correo = document.getElementById('email').value;
-            const metodoPago = document.getElementById('payment-method').value;
+        // --- 1. Lógica de Reintentos y Timeout (Punto 5) ---
+        async function fetchConReintentosYTimeout(url, options, retries = 3, timeoutMs = 8000) {
+            for (let i = 0; i < retries; i++) {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+                
+                try {
+                    const response = await fetch(url, { ...options, signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    
+                    // Si es un error 500 (Servidor), lanzamos error para que reintente
+                    if (response.status >= 500) {
+                        throw new Error(`Error del servidor (${response.status})`);
+                    }
+                    
+                    // Si es 2xx o 4xx (Validación), devolvemos la respuesta sin reintentar
+                    return response; 
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    const isLastRetry = i === retries - 1;
+                    
+                    if (error.name === 'AbortError') {
+                        if (isLastRetry) throw new Error("Timeout: El servidor tardó demasiado en responder.");
+                    } else if (isLastRetry) {
+                        throw new Error("Error de red: No se pudo conectar con el servidor tras varios intentos.");
+                    }
+                    
+                    // Espera exponencial antes del siguiente reintento (1s, 2s)
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+                }
+            }
+        }
+
+        // --- 2. Flujo principal de Suscripción ---
+        async function iniciarSuscripcion() {
+            const btnSubmit = document.getElementById('btn-submit');
+            const mensajeDiv = document.getElementById('status-message');
+            
+            // UX: Estado de carga (Punto 5 y 6)
+            btnSubmit.classList.add('is-loading');
+            btnSubmit.disabled = true;
+            mensajeDiv.style.display = 'none';
 
             const payload = {
-                user_name: nombre,
-                email: correo,
-                payment_method: {'type': metodoPago}
+                user_name: document.getElementById('name').value,
+                email: document.getElementById('email').value,
+                payment_method: {'type': document.getElementById('payment-method').value}
             };
 
-            const respuesta = await fetch('/api/subscribirse', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
+            try {
+                // Consumo HTTP con retries (Punto 5)
+                const respuesta = await fetchConReintentosYTimeout('/api/subscribirse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
 
-            const datos = await respuesta.json();
+                const datos = await respuesta.json();
 
-            const mensajeDiv = document.getElementById('status-message');
-
-            if (respuesta.ok){
-                mensajeDiv.innerHTML = "Exito " + datos.message;
-                mensajeDiv.style.color = 'green';
-            } else {
-                mensajeDiv.innerHTML = "Error: " + datos.error;
-                mensajeDiv.style.color = 'red';
+                if (respuesta.ok) {
+                    manejarExito(datos);
+                } else {
+                    // UX: Mensajes claros según el error (Punto 6)
+                    const errorMsg = respuesta.status === 400 ? "Faltan datos requeridos." : "Error al procesar el pago.";
+                    mostrarError(`${errorMsg} Detalle: ${datos.error || 'Desconocido'}`);
+                }
+            } catch (error) {
+                // Captura fallos de red o timeout
+                mostrarError(error.message);
+            } finally {
+                // UX: Quitar estado de carga
+                btnSubmit.classList.remove('is-loading');
+                btnSubmit.disabled = false;
             }
+        }
+
+        // --- 3. Manejo de Interfaz (Punto 4 y 6) ---
+        function manejarExito(datos) {
+            // Ocultar formulario, mostrar dashboard
+            document.getElementById('subscription-form').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            
+            // Actualizar estado en el Dashboard
+            const statusTag = document.getElementById('sub-status');
+            statusTag.innerText = "Activa";
+            statusTag.className = "tag is-success is-medium";
+            
+            // Guardar ID
+            const subId = datos.data ? datos.data.id : 'N/A';
+            document.getElementById('sub-id').value = subId;
+            document.getElementById('sub-id-display').innerText = subId;
+
+            // Notificación en tiempo real (Toast)
+            mostrarToast("¡Pago exitoso! Suscripción activada.");
+        }
+
+        async function cancelarSuscripcion() {
+            const btnCancelar = document.getElementById('btn-cancelar');
+            btnCancelar.classList.add('is-loading');
+            
+            const subId = document.getElementById('sub-id').value;
+            
+            try {
+                const respuesta = await fetch(`/api/subscribirse/${subId}/cancelar`, { method: 'POST' });
+                if (respuesta.ok) {
+                    const statusTag = document.getElementById('sub-status');
+                    statusTag.innerText = "Cancelada";
+                    statusTag.className = "tag is-danger is-medium";
+                    btnCancelar.style.display = 'none'; // Ocultar botón de cancelar
+                    mostrarToast("Suscripción cancelada exitosamente.");
+                } else {
+                    mostrarError("No se pudo cancelar la suscripción.");
+                }
+            } catch (error) {
+                mostrarError("Error de red al intentar cancelar.");
+            } finally {
+                btnCancelar.classList.remove('is-loading');
+            }
+        }
+
+        // Funciones de utilidad visual
+        function mostrarError(mensaje) {
+            const mensajeDiv = document.getElementById('status-message');
+            mensajeDiv.innerText = mensaje;
+            mensajeDiv.style.display = 'block';
+        }
+
+        function mostrarToast(mensaje) {
+            const toast = document.getElementById('toast');
+            toast.innerText = mensaje;
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 4000);
         }
     </script>
 </body>
