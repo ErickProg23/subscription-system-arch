@@ -7,6 +7,21 @@ def create_subscription_blueprint(use_case, repository):
     ""
     subscription_bp = Blueprint("subscriptions", __name__)
 
+    @subscription_bp.route('/api/subscribirse/<sub_id>', methods=['GET'])
+    def get_subscription(sub_id):
+        try:
+            suscripcion = repository.find_by_id(sub_id)
+
+            if not suscripcion:
+                return jsonify({"error": "Suscripción no encontrada"}), 404
+
+            return jsonify({
+                "message": "Suscripción consultada exitosamente",
+                "data": suscripcion.to_dict()
+            }), 200
+        except Exception as e:
+            return jsonify({"error": "Error interno del servidor", "details": str(e)}), 500
+
     def update_subscription_status(sub_id, new_status):
         suscripcion = repository.find_by_id(sub_id)
 

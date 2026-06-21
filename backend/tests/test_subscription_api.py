@@ -89,6 +89,24 @@ class SubscriptionApiIntegrationTests(unittest.TestCase):
         saved_subscription = self.subscription_repository.find_by_id(subscription_id)
         self.assertEqual(saved_subscription.status, SubscriptionStatus.EXPIRED)
 
+    def test_get_subscription_returns_current_status(self):
+        create_response = self.client.post(
+            "/api/subscribirse",
+            json={
+                "user_name": "Erick",
+                "email": "erick@example.com",
+                "payment_method": {"type": "card", "last4": "4242"},
+            },
+        )
+        subscription_id = create_response.get_json()["data"]["id"]
+
+        get_response = self.client.get(f"/api/subscribirse/{subscription_id}")
+
+        self.assertEqual(get_response.status_code, 200)
+        body = get_response.get_json()
+        self.assertEqual(body["data"]["id"], subscription_id)
+        self.assertEqual(body["data"]["status"], "Activa")
+
 
 if __name__ == "__main__":
     unittest.main()

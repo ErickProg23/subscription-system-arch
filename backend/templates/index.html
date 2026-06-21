@@ -33,9 +33,14 @@
                     <p class="is-size-7 has-text-grey">ID de referencia: <span id="sub-id-display"></span></p>
                 </div>
                 <input type="hidden" id="sub-id">
-                <button id="btn-cancelar" class="button is-danger is-outlined is-fullwidth" onclick="cancelarSuscripcion()">
-                    Cancelar Suscripción
-                </button>
+                <div class="buttons">
+                    <button id="btn-cancelar" class="button is-danger is-outlined is-fullwidth" onclick="cancelarSuscripcion()">
+                        Cancelar Suscripción
+                    </button>
+                    <button id="btn-expirar" class="button is-warning is-outlined is-fullwidth" onclick="expirarSuscripcion()">
+                        Marcar como Expirada
+                    </button>
+                </div>
             </div>
 
             <form id="subscription-form" class="box" onsubmit="event.preventDefault(); iniciarSuscripcion();">
@@ -151,23 +156,62 @@
         }
 
         // --- 3. Manejo de Interfaz (Punto 4 y 6) ---
-        function manejarExito(datos) {
+        async function manejarExito(datos) {
             // Ocultar formulario, mostrar dashboard
             document.getElementById('subscription-form').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
-            
-            // Actualizar estado en el Dashboard
-            const statusTag = document.getElementById('sub-status');
-            statusTag.innerText = "Activa";
-            statusTag.className = "tag is-success is-medium";
-            
+
             // Guardar ID
             const subId = datos.data ? datos.data.id : 'N/A';
             document.getElementById('sub-id').value = subId;
             document.getElementById('sub-id-display').innerText = subId;
 
-            // Notificación en tiempo real (Toast)
-            mostrarToast("¡Pago exitoso! Suscripción activada.");
+            await cargarEstadoSuscripcion();
+            mostrarToast("Suscripción creada exitosamente.");
+        }
+
+        async function cargarEstadoSuscripcion() {
+            const subId = document.getElementById('sub-id').value;
+
+            if (!subId || subId === 'N/A') {
+                return;
+            }
+
+            const respuesta = await fetch(`/api/subscribirse/${subId}`);
+            const datos = await respuesta.json();
+
+            if (!respuesta.ok) {
+                throw new Error(datos.error || "No se pudo consultar el estado de la suscripción.");
+            }
+
+            actualizarDashboard(datos.data);
+        }
+
+        function actualizarDashboard(subscriptionData) {
+            const statusTag = document.getElementById('sub-status');
+            const btnCancelar = document.getElementById('btn-cancelar');
+            const btnExpirar = document.getElementById('btn-expirar');
+            const status = subscriptionData.status;
+
+            statusTag.innerText = status;
+
+            if (status === "Activa") {
+                statusTag.className = "tag is-success is-medium";
+                btnCancelar.style.display = 'inline-flex';
+                btnExpirar.style.display = 'inline-flex';
+            } else if (status === "Cancelada") {
+                statusTag.className = "tag is-danger is-medium";
+                btnCancelar.style.display = 'none';
+                btnExpirar.style.display = 'none';
+            } else if (status === "Expirada") {
+                statusTag.className = "tag is-warning is-medium";
+                btnCancelar.style.display = 'none';
+                btnExpirar.style.display = 'none';
+            } else {
+                statusTag.className = "tag is-info is-medium";
+                btnCancelar.style.display = 'none';
+                btnExpirar.style.display = 'none';
+            }
         }
 
         async function cancelarSuscripcion() {
@@ -179,10 +223,7 @@
             try {
                 const respuesta = await fetch(`/api/subscribirse/${subId}/cancelar`, { method: 'POST' });
                 if (respuesta.ok) {
-                    const statusTag = document.getElementById('sub-status');
-                    statusTag.innerText = "Cancelada";
-                    statusTag.className = "tag is-danger is-medium";
-                    btnCancelar.style.display = 'none'; // Ocultar botón de cancelar
+                    await cargarEstadoSuscripcion();
                     mostrarToast("Suscripción cancelada exitosamente.");
                 } else {
                     mostrarError("No se pudo cancelar la suscripción.");
@@ -191,6 +232,27 @@
                 mostrarError("Error de red al intentar cancelar.");
             } finally {
                 btnCancelar.classList.remove('is-loading');
+            }
+        }
+
+        async function expirarSuscripcion() {
+            const btnExpirar = document.getElementById('btn-expirar');
+            btnExpirar.classList.add('is-loading');
+
+            const subId = document.getElementById('sub-id').value;
+
+            try {
+                const respuesta = await fetch(`/api/subscribirse/${subId}/expirar`, { method: 'POST' });
+                if (respuesta.ok) {
+                    await cargarEstadoSuscripcion();
+                    mostrarToast("Suscripción marcada como expirada.");
+                } else {
+                    mostrarError("No se pudo expirar la suscripción.");
+                }
+            } catch (error) {
+                mostrarError("Error de red al intentar expirar.");
+            } finally {
+                btnExpirar.classList.remove('is-loading');
             }
         }
 
