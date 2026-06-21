@@ -43,6 +43,11 @@ class SqliteSubscriptionRepository(SubscriptionRepository):
                 """
                 INSERT INTO subscriptions (id, user_name, email, payment_method, status, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    user_name = excluded.user_name,
+                    email = excluded.email,
+                    payment_method = excluded.payment_method,
+                    status = excluded.status
                 """,
                 (
                     subscription.id,

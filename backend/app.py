@@ -1,3 +1,7 @@
+import os
+import threading
+import time
+
 from flask import Flask, request, jsonify, render_template
 from src.infrastructure.database.sqlite_db import SqliteSubscriptionRepository
 from src.infrastructure.database.outbox_db import OutboxRepository
@@ -9,6 +13,7 @@ from src.infrastructure.controllers.subscription_controller import create_subscr
 
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
+WORKER_POLL_INTERVAL_SECONDS = 2
 
 
 # --- 1. Configuracion de dependencias ---
@@ -30,6 +35,29 @@ outbox_worker = OutboxWorker(
 )
 
 
+def run_outbox_worker_forever():
+    """Procesa continuamente eventos pendientes del outbox."""
+    while True:
+        try:
+            processed = outbox_worker.process_once()
+            if processed:
+                print(f"[OutboxWorker] Eventos procesados: {processed}")
+        except Exception as error:
+            print(f"[OutboxWorker] Error procesando eventos: {error}")
+
+        time.sleep(WORKER_POLL_INTERVAL_SECONDS)
+
+
+def start_outbox_worker():
+    worker_thread = threading.Thread(
+        target=run_outbox_worker_forever,
+        name="outbox-worker",
+        daemon=True,
+    )
+    worker_thread.start()
+    return worker_thread
+
+
 # --- 2. Registro de rutas ---
 app.register_blueprint(create_subscription_blueprint(subscription_use_case, db_repository))
 
@@ -47,7 +75,7 @@ def simulate_errors():
 
     return jsonify({
         'message': 'Configuración de simulación actualizada',
-        'db_down': db_repository.simulate_db_down,
+        'db_down': getattr(db_repository, 'simulate_db_down', False),
         'webhook_error': notification_service.simulate_500_error
     })
 
@@ -59,7 +87,12 @@ def process_outbox():
 
 
 if __name__ == '__main__':
+    debug_mode = True
+
+    if not debug_mode or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        start_outbox_worker()
+
     print("Iniciando el servidor Flask en http://localhost:5000")
-    app.run(debug=True, port =5000)
+    app.run(debug=debug_mode, port=5000)
 
 

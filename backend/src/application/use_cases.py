@@ -1,6 +1,6 @@
 from src.domain.entities.subscription import Subscription, SubscriptionStatus
 from src.domain.repositories.subscription_repository import SubscriptionRepository
-
+import json
 import uuid
 from datetime import datetime
 
@@ -37,11 +37,11 @@ class CreateSubscriptionUseCase:
         event_payload = {
             "subscription_id": subscription.id,
         }
-        event_id = str(subscription.id)  # idempotencia simple por suscripción
+       
         self.outbox_repository.create_event(
-            event_id=event_id,
+            event_id=str(subscription.id),
             event_type="NOTIFY_WEBHOOK",
-            payload=str(event_payload),
+            payload=json.dumps(event_payload),
             status="PENDING",
             max_attempts=5,
         )

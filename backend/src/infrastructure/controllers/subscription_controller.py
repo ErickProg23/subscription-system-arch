@@ -6,6 +6,20 @@ def create_subscription_blueprint(use_case, repository):
     "Creamos uin Blueprint de Flask para manejar las rutas relacionadas con las suscripciones"
     ""
     subscription_bp = Blueprint("subscriptions", __name__)
+
+    def update_subscription_status(sub_id, new_status):
+        suscripcion = repository.find_by_id(sub_id)
+
+        if not suscripcion:
+            return jsonify({"error": "Suscripción no encontrada"}), 404
+
+        suscripcion.status = new_status
+        repository.save(suscripcion)
+
+        return jsonify({
+            "message": f"Suscripción {new_status.value.lower()} exitosamente",
+            "status": suscripcion.status.value
+        }), 200
     
     @subscription_bp.route('/api/subscribirse', methods=['POST'])
     def subscribe():
@@ -46,24 +60,14 @@ def create_subscription_blueprint(use_case, repository):
     @subscription_bp.route('/api/subscribirse/<sub_id>/cancelar', methods=['POST'])
     def cancelar(sub_id):
         try:
-            # 1. Buscamos la suscripción en memoria
-            suscripcion = repository.find_by_id(sub_id)
-            
-            if not suscripcion:
-                return jsonify({"error": "Suscripción no encontrada"}), 404
-            
-            # 2. Cambiamos el estado
-            suscripcion.status = SubscriptionStatus.CANCELED
-            
-            # 3. Guardamos el cambio (en memoria es automático si modificas el objeto, 
-            # pero es buena práctica llamar al save)
-            repository.save(suscripcion)
-            
-            return jsonify({
-                "message": "Suscripción cancelada exitosamente",
-                "status": suscripcion.status.value
-            }), 200
-            
+            return update_subscription_status(sub_id, SubscriptionStatus.CANCELED)
+        except Exception as e:
+            return jsonify({"error": "Error interno del servidor", "details": str(e)}), 500
+
+    @subscription_bp.route('/api/subscribirse/<sub_id>/expirar', methods=['POST'])
+    def expirar(sub_id):
+        try:
+            return update_subscription_status(sub_id, SubscriptionStatus.EXPIRED)
         except Exception as e:
             return jsonify({"error": "Error interno del servidor", "details": str(e)}), 500
 
